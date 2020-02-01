@@ -6,3 +6,6 @@ At this time sound files must be 16 bits in .WAV format. All audio must be mono 
 
 ## Sounds Source ##
 freesound.org
+
+https://freesound.org/people/univ_lyon3/sounds/367085/
+https://freesound.org/people/Knayru/sounds/150880/
