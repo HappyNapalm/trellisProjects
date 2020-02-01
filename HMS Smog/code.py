@@ -1,48 +1,89 @@
-import math
 import time
-import array
 import board
-import busio
 import audioio
-import adafruit_trellis_express
-import adafruit_adxl34x
-from wave_parsing import parse_wav
+import adafruit_fancyled.adafruit_fancyled as fancy
+import adafruit_trellism4
+from color_names import * # pylint: disable=wildcard-import,unused-wildcard-import
 
-tempo = 180  # Starting BPM
 
-# You can use the accelerometer to speed/slow down tempo by tilting!
-ENABLE_TILT_TEMPO = True
+PLAY_SAMPLES_ON_START = False
 
-# You get 4 voices, they must all have the same sample rate and must
-# all be mono or stereo (no mix-n-match!)
-VOICES = ["voice01.wav", "voice02.wav", "voice03.wav", "voice04.wav"]
+SAMPLE_FOLDER = "/effects/"  # the name of the folder containing the samples
+# This soundboard can select up to *32* sound clips! each one has a filename
+# which will be inside the SAMPLE_FOLDER above, and a *color* in a tuple ()
+# 01.wav GEAR_MULTIPLE_BURSTS_001.wav from JoelAudio -> https://freesound.org/people/JoelAudio/sounds/135846/
+# SAMPLES = [("01.wav", RED),
+#            ("01.wav", ORANGE),
+#            ("01.wav", YELLOW),
+#            ("01.wav", GREEN),
+#            ("01.wav", TEAL),
+#            ("01.wav", BLUE),
+#            ("01.wav", PURPLE),
+#            ("01.wav", PINK),
+#            ("01.wav", RED),
+#            ("01.wav", ORANGE),
+#            ("01.wav", YELLOW),
+#            ("01.wav", GREEN),
+#            ("01.wav", TEAL),
+#            ("01.wav", BLUE),
+#            ("01.wav", PURPLE),
+#            ("01.wav", PINK),
+#            ("01.wav", RED),
+#            ("01.wav", ORANGE),
+#            ("01.wav", YELLOW),
+#            ("01.wav", GREEN),
+#            ("01.wav", TEAL),
+#            ("01.wav", BLUE),
+#            ("01.wav", PURPLE),
+#            ("01.wav", PINK),
+#            ("01.wav", RED),
+#            ("01.wav", ORANGE),
+#            ("01.wav", YELLOW),
+#            ("01.wav", GREEN),
+#            ("01.wav", TEAL),
+#            ("01.wav", BLUE),
+#            ("01.wav", PURPLE),
+#            ("01.wav", PINK)]
+SAMPLES = [("01.wav", RED),
+           ("02.wav", ORANGE),
+           ("03.wav", YELLOW),
+           ("04.wav", GREEN),
+           ("05.wav", TEAL),
+           ("06.wav", BLUE),
+           ("07.wav", PURPLE),
+           ("08.wav", PINK),
+           ("09.wav", RED),
+           ("10.wav", ORANGE),
+           ("11.wav", YELLOW),
+           ("12.wav", GREEN),
+           ("13.wav", TEAL),
+           ("14.wav", BLUE),
+           ("15.wav", PURPLE),
+           ("16.wav", PINK),
+           ("17.wav", RED),
+           ("18.wav", ORANGE),
+           ("19.wav", YELLOW),
+           ("20.wav", GREEN),
+           ("21.wav", TEAL),
+           ("22.wav", BLUE),
+           ("23.wav", PURPLE),
+           ("24.wav", PINK),
+           ("25.wav", RED),
+           ("26.wav", ORANGE),
+           ("27.wav", YELLOW),
+           ("28.wav", GREEN),
+           ("29.wav", TEAL),
+           ("30.wav", BLUE),
+           ("31.wav", PURPLE),
+           ("32.wav", PINK)]
 
-# four colors for the 4 voices, using 0 or 255 only will reduce buzz
-DRUM_COLOR = ((0, 255, 255),
-              (0, 255, 0),
-              (255, 255, 0),
-              (255, 0, 0) )
-# the color for the sweeping ticker
-TICKER_COLOR = (255, 255, 255)
+# For the intro, pick any number of colors to make a fancy gradient!
+INTRO_SWIRL = [RED, GREEN, BLUE]
+# the color for the selected sample
+SELECTED_COLOR = WHITE
 
 # Our keypad + neopixel driver
-trellis = adafruit_trellis_express.TrellisM4Express(rotation=90)
-
-# Our accelerometer
-i2c = busio.I2C(board.ACCELEROMETER_SCL, board.ACCELEROMETER_SDA)
-accelerometer = adafruit_adxl34x.ADXL345(i2c)
-
-def wheel(pos): # Input a value 0 to 255 to get a color value.
-    if pos < 0 or pos > 255:
-        return (0, 0, 0)
-    elif pos < 85:
-        return(int(pos * 3), int(255 - pos*3), 0)
-    elif pos < 170:
-        pos -= 85
-        return(int(255 - pos*3), 0, int(pos * 3))
-    else:
-        pos -= 170
-        return(0, int(pos * 3), int(255 - pos*3))
+trellis = adafruit_trellism4.TrellisM4Express(rotation=0)
 
 # Play the welcome wav (if its there)
 with audioio.AudioOut(board.A1, right_channel=board.A0) as audio:
@@ -50,179 +91,120 @@ with audioio.AudioOut(board.A1, right_channel=board.A0) as audio:
         f = open("welcome.wav", "rb")
         wave = audioio.WaveFile(f)
         audio.play(wave)
-        j = 0
-	trellis.pixels._neopixel.brightness = 0.25
+        swirl = 0  # we'll swirl through the colors in the gradient
         while audio.playing:
             for i in range(32):
-                pixel_index = (i * 256 // 32) + j
-                trellis.pixels._neopixel[i] = wheel(pixel_index & 255)
-            trellis.pixels._neopixel.show()
-            j = (j+1) % 256
+                palette_index = ((swirl+i) % 32) / 32
+                color = fancy.palette_lookup(INTRO_SWIRL, palette_index)
+                # display it!
+                trellis.pixels[(i%8, i//8)] = color.pack()
+            swirl += 1
             time.sleep(0.005)
         f.close()
         # Clear all pixels
-        trellis.pixels._neopixel.fill(0)
-        trellis.pixels._neopixel.show()
-	trellis.pixels._neopixel.brightness = 1.0
+        trellis.pixels.fill(0)
         # just hold a moment
         time.sleep(0.5)
     except OSError:
         # no biggie, they probably deleted it
         pass
-        
 
 # Parse the first file to figure out what format its in
-wave_format = parse_wav(VOICES[0])
-print(wave_format)
+channel_count = None
+bits_per_sample = None
+sample_rate = None
+with open(SAMPLE_FOLDER+SAMPLES[0][0], "rb") as f:
+    wav = audioio.WaveFile(f)
+    print("%d channels, %d bits per sample, %d Hz sample rate " %
+          (wav.channel_count, wav.bits_per_sample, wav.sample_rate))
 
-# Audio playback object - we'll go with either mono or stereo depending on
-# what we see in the first file
-if wave_format['channels'] == 1:
-    audio = audioio.AudioOut(board.A1)
-elif wave_format['channels'] == 2:
-    audio = audioio.AudioOut(board.A1, right_channel=board.A0)
-else:
-    raise RuntimeError("Must be mono or stereo waves!")
-mixer = audioio.Mixer(voice_count=4, sample_rate=wave_format['sample_rate'],
-                     channel_count=wave_format['channels'],
-                      bits_per_sample=16, samples_signed=True)
-audio.play(mixer)
-
-samples = []
-# Read the 4 wave files, convert to stereo samples, and store
-# (show load status on neopixels and play audio once loaded too!)
-for v in range(4):
-    trellis.pixels[(v, 0)] = DRUM_COLOR[v]
-    wave_file = open(VOICES[v], "rb")
-    # OK we managed to open the wave OK
-    for x in range(1,4):
-        trellis.pixels[(v, x)] = DRUM_COLOR[v]
-    sample = audioio.WaveFile(wave_file)
-    # debug play back on load!
-    mixer.play(sample, voice=0)
-    for x in range(4,7):
-        trellis.pixels[(v, x)] = DRUM_COLOR[v]
-    while mixer.playing:
-        pass
-    trellis.pixels[(v, 7)] = DRUM_COLOR[v]
-    samples.append(sample)
+    # Audio playback object - we'll go with either mono or stereo depending on
+    # what we see in the first file
+    if wav.channel_count == 1:
+        audio = audioio.AudioOut(board.A1)
+    elif wav.channel_count == 2:
+        audio = audioio.AudioOut(board.A1, right_channel=board.A0)
+    else:
+        raise RuntimeError("Must be mono or stereo waves!")
 
 # Clear all pixels
-trellis.pixels._neopixel.fill(0)
-trellis.pixels._neopixel.show()
+trellis.pixels.fill(0)
 
-# Our global state
-current_step = 7 # we actually start on the last step since we increment first
-# the state of the sequencer
-beatset = [[False] * 8, [False] * 8, [False] * 8, [False] * 8]
-# currently pressed buttons
+# turn on maybe play all of the buttons
+for i, v in enumerate(SAMPLES):
+    filename = SAMPLE_FOLDER+v[0]
+    try:
+        with open(filename, "rb") as f:
+            wav = audioio.WaveFile(f)
+            print(filename,
+                  "%d channels, %d bits per sample, %d Hz sample rate " %
+                  (wav.channel_count, wav.bits_per_sample, wav.sample_rate))
+            if wav.channel_count != channel_count:
+                pass
+            if wav.bits_per_sample != bits_per_sample:
+                pass
+            if wav.sample_rate != sample_rate:
+                pass
+            trellis.pixels[(i%8, i//8)] = v[1]
+            if PLAY_SAMPLES_ON_START:
+                audio.play(wav)
+                while audio.playing:
+                    pass
+    except OSError:
+        # File not found! skip to next
+        pass
+
+def stop_playing_sample(playback_details):
+    print("playing: ", playback_details)
+    audio.stop()
+    trellis.pixels[playback_details['neopixel_location']] = playback_details['neopixel_color']
+    playback_details['file'].close()
+    playback_details['voice'] = None
+
 current_press = set()
-
+currently_playing = {'voice' : None}
+last_samplenum = None
 while True:
-    stamp = time.monotonic()
-    # redraw the last step to remove the ticker bar (e.g. 'normal' view)
-    for y in range(4):
-        color = 0
-        if beatset[y][current_step]:
-            color = DRUM_COLOR[y]
-        trellis.pixels[(y, current_step)] = color
+    pressed = set(trellis.pressed_keys)
+    #if pressed:
+    #    print("Pressed:", pressed)
 
-    # next beat!
-    current_step = (current_step + 1) % 8
-    
-    # draw the vertical ticker bar, with selected voices highlighted
-    for y in range(4):
-        if beatset[y][current_step]:
-            r, g, b = DRUM_COLOR[y]
-            color = (r//2, g//2, b//2)  # this voice is enabled
-            #print("Playing: ", VOICES[y])
-            mixer.play(samples[y], voice=y)
-        else:
-            color = TICKER_COLOR     # no voice on
-        trellis.pixels[(y, current_step)] = color
+    just_pressed = pressed - current_press
+    just_released = current_press - pressed
 
-    # handle button presses while we're waiting for the next tempo beat
-    # also check the accelerometer if we're using it, to adjust tempo
-    while time.monotonic() - stamp < 60/tempo:
-        # Check for pressed buttons
-        pressed = set(trellis.pressed_keys)
-        #print(pressed)
-        for down in pressed - current_press:
-            print("Pressed down", down)
-            y = down[0]
-            x = down[1]
-            beatset[y][x] = not beatset[y][x] # enable the voice
-            if beatset[y][x]:
-                color = DRUM_COLOR[y]
-            else:
-                color = 0
-            trellis.pixels[down] = color
-        current_press = pressed
+    #if just_pressed:
+    #    print("Just pressed", just_pressed)
+    for down in just_pressed:
+        sample_num = down[1]*8 + down[0]
+        print(sample_num)
+        try:
+            filename = SAMPLE_FOLDER+SAMPLES[sample_num][0]
+            f = open(filename, "rb")
+            wav = audioio.WaveFile(f)
 
-        if ENABLE_TILT_TEMPO:
-            # Check accelerometer tilt!
-            tilt = accelerometer.acceleration[1]
-            #print("%0.1f" % tilt)
-            new_tempo = tempo
-            if tilt < -9:
-                new_tempo = tempo + 5
-            elif tilt < -6:
-                new_tempo = tempo + 1
-            elif tilt > 9:
-                new_tempo = tempo - 5
-            elif tilt > 6:
-                new_tempo = tempo - 1
-            if new_tempo != tempo:
-                tempo = max(min(new_tempo, 300), 100)
-                print("Tempo: %d BPM" % tempo)
-                time.sleep(0.05)  # dont update tempo too fast!
-        time.sleep(0.01)  # a little delay here helps avoid debounce annoyances
+            # is something else playing? interrupt it!
+            if currently_playing['voice'] != None:
+                print("Interrupt")
+                stop_playing_sample(currently_playing)
 
+            trellis.pixels[down] = WHITE
+            audio.play(wav)
+            # voice, neopixel tuple, color, and sample, file handle
+            currently_playing = {
+                'voice': 0,
+                'neopixel_location': down,
+                'neopixel_color': SAMPLES[sample_num][1],
+                'sample_num': sample_num,
+                'file': f}
+        except OSError:
+            pass # File not found! skip to next
 
-            
-# import adafruit_trellism4
- 
-# trellis = adafruit_trellism4.TrellisM4Express()
- 
- 
-# def wheel(pos):
-#     if pos < 0 or pos > 255:
-#         return 0, 0, 0
-#     if pos < 85:
-#         return int(255 - pos * 3), int(pos * 3), 0
-#     if pos < 170:
-#         pos -= 85
-#         return 0, int(255 - pos * 3), int(pos * 3)
-#     pos -= 170
-#     return int(pos * 3), 0, int(255 - (pos * 3))
- 
- 
-# led_on = []
- 
-# for x in range(trellis.pixels.width):
-#     led_on.append([])
-#     for y in range(trellis.pixels.height):
-#         led_on[x].append(False)
- 
-# trellis.pixels.fill((0, 0, 0))
- 
-# current_press = set()
- 
-# while True:
-#     pressed = set(trellis.pressed_keys)
- 
-#     for press in pressed - current_press:
-#         x, y = press
- 
-#         if not led_on[x][y]:
-#             print("Turning on:", press)
-#             pixel_index = ((x + (y * 8)) * 256 // 32)
-#             trellis.pixels[x, y] = wheel(pixel_index & 255)
-#             led_on[x][y] = True
- 
-#         else:
-#             print("Turning off:", press)
-#             trellis.pixels[x, y] = (0, 0, 0)
-#             led_on[x][y] = False
- 
-#     current_press = pressed
+    #if just_released:
+    #    print("Just released:", just_released)
+
+    # check if any samples are done
+    if not audio.playing and currently_playing['voice'] != None:
+        stop_playing_sample(currently_playing)
+
+    time.sleep(0.01)  # a little delay here helps avoid debounce annoyances
+    current_press = pressed
